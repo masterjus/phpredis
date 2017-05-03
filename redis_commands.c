@@ -962,7 +962,7 @@ int redis_key_arr_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
 
     /* Iterate our hash table, serializing and appending values */
     ZEND_HASH_FOREACH_VAL(ht_arr, z_val) {
-        val_free = redis_serialize(redis_sock, z_val, &val, &val_len TSRMLS_CC);
+        val_free = redis_pack(redis_sock, z_val, &val, &val_len TSRMLS_CC);
         redis_cmd_append_sstr(&cmdstr, val, val_len);
         if (val_free) efree(val);
     } ZEND_HASH_FOREACH_END();
@@ -1488,7 +1488,7 @@ int redis_hmset_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
         }
 
         // Serialize value (if directed)
-        val_free = redis_serialize(redis_sock, z_val, &val, &val_len TSRMLS_CC);
+        val_free = redis_pack(redis_sock, z_val, &val, &val_len TSRMLS_CC);
 
         // Append the key and value to our command
         redis_cmd_append_sstr(&cmdstr, mem, mem_len);
@@ -1716,8 +1716,7 @@ static int redis_gen_pf_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
                 return FAILURE;
             }
         } else {
-            mem_free = redis_serialize(redis_sock, z_ele, &mem, &mem_len
-                TSRMLS_CC);
+            mem_free = redis_pack(redis_sock, z_ele, &mem, &mem_len TSRMLS_CC);
 
             zstr = NULL;
             if(!mem_free) {
@@ -2448,8 +2447,7 @@ int redis_zadd_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
             redis_cmd_append_sstr_dbl(&cmdstr, zval_get_double(&z_args[i]));
         }
         // serialize value if requested
-        val_free = redis_serialize(redis_sock, &z_args[i+1], &val, &val_len
-            TSRMLS_CC);
+        val_free = redis_pack(redis_sock, &z_args[i+1], &val, &val_len TSRMLS_CC);
         redis_cmd_append_sstr(&cmdstr, val, val_len);
 
         // Free value if we serialized
@@ -2964,6 +2962,8 @@ void redis_getoption_handler(INTERNAL_FUNCTION_PARAMETERS,
     switch(option) {
         case REDIS_OPT_SERIALIZER:
             RETURN_LONG(redis_sock->serializer);
+        case REDIS_OPT_COMPRESSION:
+            RETURN_LONG(redis_sock->compression);
         case REDIS_OPT_PREFIX:
             if(redis_sock->prefix) {
                 RETURN_STRINGL(redis_sock->prefix, redis_sock->prefix_len);
@@ -3004,6 +3004,17 @@ void redis_setoption_handler(INTERNAL_FUNCTION_PARAMETERS,
 #endif
             ) {
                 redis_sock->serializer = val_long;
+                RETURN_TRUE;
+            }
+            break;
+        case REDIS_OPT_COMPRESSION:
+            val_long = atol(val_str);
+            if (val_long == REDIS_COMPRESSION_NONE
+#ifdef HAVE_REDIS_LZF
+                || val_long == REDIS_COMPRESSION_LZF
+#endif
+            ) {
+                redis_sock->compression = val_long;
                 RETURN_TRUE;
             }
             break;
